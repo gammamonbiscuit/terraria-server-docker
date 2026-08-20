@@ -161,11 +161,11 @@ If you want the server to start automatically on subsequent runs, you need to pr
 | `world` | (*empty*) | Name of the world file. _You need to provide a world for the server to start automatically_ | `world=world1.wld` |
 | `autocreate` | `2` | Creates a world if none is found in the path specified by -world. World size is specified by: 1(small), 2(medium), and 3(large). | `autocreate=2` |
 | `seed` | (*empty*) | Specifies the world seed when using -autocreate | `seed=someseed123` |
-| `difficulty` | `0` | Sets world difficulty when using `autocreate`. Options: 0(normal), 1(expert), 2(master), 3(journey) | `difficulty=1` |
+| `difficulty` | `1` | Sets world difficulty when using `autocreate`. Options: 0(normal), 1(expert), 2(master), 3(journey) | `difficulty=1` |
 | `maxplayers` | `16` | The maximum number of players allowed |  `maxplayers=8` |
 | `port` | `7777` | Port used internally by the terraria server. _You should not change this._ | `port=8123` |
 | `password` | (*empty*)  | Set a password for the server | `password=serverpassword` |
-| `motd` | (*empty*) | Set the server motto of the day text. | `motd="Welcome to my private server! :)"` |
+| `motd` | `Welcome!` | Set the server motto of the day text. | `motd="Welcome to my private server! :)"` |
 | `worldpath` | `/root/.local/share/Terraria/Worlds` | Sets the directory where world files will be stored. Don't change this unless you know what you are doing. | `worldpath=/some/other/dir` |
 | `banlist` | `banlist.txt` | The location of the banlist. Defaults to "banlist.txt" in the working directory. | `banlist=/configs/banlist.txt` -> this would imply that you mount your banlist.txt file in the container's path `/configs/banlist.txt` |
 | `secure` | `1` | Option to prevent cheats. (1: no cheats or 0: cheats allowed) | `secure=0` |
@@ -227,3 +227,4 @@ The command ban <player> will ban the indicated player from the server. A banned
 
 ```
 *Note: no forward-slash `/` is needed before the command, as some command interfaces require.*
+*Note: Detach from the container by pressing ctrl+p + ctrl+q*
