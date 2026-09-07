@@ -24,6 +24,7 @@ RUN chmod +x \
     create-server-config.sh \
     init-TerrariaServer-amd64.sh \
     init-TerrariaServer-arm64.sh \
+    logging.sh \
     download_server.py \
     prune_unused_files.py \
     get_latest_by_iteration.py \
