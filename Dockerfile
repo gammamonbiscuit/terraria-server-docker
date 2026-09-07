@@ -1,3 +1,10 @@
+FROM rust:1.98-alpine AS twall
+
+RUN apk --no-cache --update add build-base
+COPY ./twall /twall
+WORKDIR /twall
+RUN cargo build --release
+
 FROM debian:forky-slim AS base
 
 ARG VERSION=latest
@@ -85,5 +92,7 @@ RUN chmod +x TerrariaServer.exe
 RUN rm System* Mono* monoconfig mscorlib.dll
 
 FROM build-${TARGETARCH} AS final
+
+COPY --chmod=755 --from=twall /twall/target/release/twall ${TERRARIA_DIR}
 
 ENTRYPOINT [ "./entrypoint.sh" ]
