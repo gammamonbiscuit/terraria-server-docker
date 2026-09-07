@@ -12,7 +12,7 @@ Worlds/*
 !Worlds/.gitkeep
 
 backups/
-build.txt
+build*
 
 # Python cache
 __pycache__/
@@ -22,9 +22,6 @@ __pycache__/
 
 # OS
 .DS_Store
-
-# LLMs
-.claude/
 
 # IDE
 .vscode/
