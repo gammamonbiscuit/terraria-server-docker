@@ -1,8 +1,76 @@
-use std::io;
+use std::fs::{File, OpenOptions};
+use std::io::{self, Write};
 use std::net::SocketAddr;
+use std::sync::{Mutex, OnceLock};
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use tokio::io::copy_bidirectional;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::{timeout, Duration};
+
+// ------------------------- logging -------------------------
+
+#[derive(Clone, Copy)]
+enum Level {
+    Info,
+    Error,
+}
+
+impl Level {
+    fn tag(self) -> &'static str {
+        match self {
+            Level::Info => "INFO",
+            Level::Error => "ERROR",
+        }
+    }
+}
+
+static LOG_FILE: OnceLock<Mutex<File>> = OnceLock::new();
+
+/// Open (or create) the log file in append mode. Never truncates.
+/// Failing to open it aborts startup — better than running silently unlogged.
+fn log_init() -> io::Result<()> {
+    let path = std::env::var("proxy_log_file").unwrap_or_else(|_| "proxy.log".to_string());
+    let file = OpenOptions::new().create(true).append(true).open(path)?;
+    if LOG_FILE.set(Mutex::new(file)).is_err() {
+        return Err(io::Error::other("log file already initialized"));
+    }
+    Ok(())
+}
+
+/// Single entry point: writes the same line to console and file.
+/// Format: PROXY: [LEVEL] [epoch-seconds] Message starting with a capital letter
+fn log(level: Level, msg: impl AsRef<str>) {
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let line = format!("PROXY: [{}] [{}] {}", level.tag(), secs, msg.as_ref());
+
+    // Console: INFO -> stdout, ERROR -> stderr (same line text).
+    match level {
+        Level::Info => println!("{line}"),
+        Level::Error => eprintln!("{line}"),
+    }
+
+    // File: one appended line per event. File is unbuffered, so the
+    // write goes out immediately. A file failure must not kill the proxy.
+    if let Some(file) = LOG_FILE.get() {
+        if let Ok(mut f) = file.lock() {
+            let _ = writeln!(f, "{line}");
+        }
+    }
+}
+
+fn info(msg: impl AsRef<str>) {
+    log(Level::Info, msg);
+}
+
+fn error(msg: impl AsRef<str>) {
+    log(Level::Error, msg);
+}
+
+// ------------------------- proxy -------------------------
 
 const LISTEN_ADDR: &str = "0.0.0.0:7778";
 const BACKEND_ADDR: &str = "127.0.0.1:7777"; // Terraria default port
@@ -23,43 +91,58 @@ const VERSION_TAG: &[u8] = b"Terraria";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    log_init()?;
     let listener = TcpListener::bind(LISTEN_ADDR).await?;
-    println!("[twall] Terraria proxy: {LISTEN_ADDR} -> {BACKEND_ADDR}");
+    info(format!("Listening on {LISTEN_ADDR}, backend {BACKEND_ADDR}"));
 
     loop {
         let (client, addr) = listener.accept().await?;
-        tokio::spawn(async move {
-            if let Err(e) = handle_client(client, addr).await {
-                eprintln!("[twall] [{addr}] error: {e}");
-            }
-        });
+        info(format!("[{addr}] Client connected"));
+
+        tokio::spawn(async move { handle_client(client, addr).await });
     }
 }
 
-async fn handle_client(mut client: TcpStream, addr: SocketAddr) -> io::Result<()> {
+/// Every path logs exactly one line and returns.
+async fn handle_client(mut client: TcpStream, addr: SocketAddr) {
     let _ = client.set_nodelay(true);
 
     // --- Middleman: only Terraria's opening handshake gets through ---
     match timeout(HANDSHAKE_TIMEOUT, is_terraria_handshake(&client)).await {
-        Ok(Ok(true)) => println!("[twall] [{addr}] Terraria handshake OK, forwarding"),
+        Ok(Ok(true)) => info(format!("[{addr}] Terraria handshake OK, forwarding")),
         Ok(Ok(false)) => {
-            eprintln!("[twall] [{addr}] not Terraria traffic, closing");
-            return Ok(()); // drop -> closed, backend never contacted
+            error(format!("[{addr}] Rejected: not Terraria traffic"));
+            return;
         }
-        Ok(Err(e)) => return Err(e),
+        Ok(Err(e)) => {
+            error(format!("[{addr}] Handshake read failed: {e}"));
+            return;
+        }
         Err(_) => {
-            eprintln!("[twall] [{addr}] handshake timeout, closing");
-            return Ok(());
+            error(format!("[{addr}] Rejected: handshake timeout"));
+            return;
         }
     }
 
     // --- Plain proxying from here on ---
-    let mut backend = TcpStream::connect(BACKEND_ADDR).await?;
+    let mut backend = match TcpStream::connect(BACKEND_ADDR).await {
+        Ok(b) => b,
+        Err(e) => {
+            error(format!("[{addr}] Backend connect failed: {e}"));
+            return;
+        }
+    };
     let _ = backend.set_nodelay(true);
 
-    let (up, down) = copy_bidirectional(&mut client, &mut backend).await?;
-    println!("[twall] [{addr}] relayed {up} up / {down} down bytes");
-    Ok(())
+    // Pump bytes both directions until either side closes.
+    let (up, down) = match copy_bidirectional(&mut client, &mut backend).await {
+        Ok(stats) => stats,
+        Err(e) => {
+            error(format!("[{addr}] Relay failed: {e}"));
+            return;
+        }
+    };
+    info(format!("[{addr}] Closed, {up} bytes up / {down} bytes down"));
 }
 
 /// Reads (via peek, so nothing is consumed) the client's first Terraria
