@@ -39,13 +39,14 @@ fn log_init() -> io::Result<()> {
 }
 
 /// Single entry point: writes the same line to console and file.
-/// Format: PROXY: [LEVEL] [epoch-seconds] Message starting with a capital letter
+/// Format: [RFC 5424 timestamp] PROXY: [LEVEL] Message
 fn log(level: Level, msg: impl AsRef<str>) {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let line = format!("PROXY: [{}] [{}] {}", level.tag(), secs, msg.as_ref());
+    let line = format!(
+        "[{}] PROXY: [{}] {}",
+        rfc5424_timestamp(),
+        level.tag(),
+        msg.as_ref()
+    );
 
     // Console: INFO -> stdout, ERROR -> stderr (same line text).
     match level {
@@ -68,6 +69,35 @@ fn info(msg: impl AsRef<str>) {
 
 fn error(msg: impl AsRef<str>) {
     log(Level::Error, msg);
+}
+
+/// Current time as an RFC 5424 timestamp: YYYY-MM-DDTHH:MM:SS.mmmZ (UTC).
+fn rfc5424_timestamp() -> String {
+    let d = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = d.as_secs();
+
+    let (h, m, s) = ((secs / 3600) % 24, (secs / 60) % 60, secs % 60);
+    let (y, mo, day) = civil_from_days((secs / 86_400) as i64);
+
+    format!("{y:04}-{mo:02}-{day:02}T{h:02}:{m:02}:{s:02}.{:03}Z", d.subsec_millis())
+}
+
+/// Days since 1970-01-01 -> (year, month, day).
+/// Howard Hinnant's `civil_from_days` algorithm — handles leap years
+/// and is valid across the whole range we care about.
+fn civil_from_days(days_since_epoch: i64) -> (i64, u64, u64) {
+    let z = days_since_epoch + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64; // [0, 146096]
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11]
+    let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
+    let m = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
+    let y = yoe as i64 + era * 400 + u64::from(m <= 2) as i64;
+    (y, m, d)
 }
 
 // ------------------------- proxy -------------------------

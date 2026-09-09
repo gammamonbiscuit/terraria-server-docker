@@ -27,7 +27,7 @@ __pycache__/
 .vscode/
 .idea/
 
-# Rust
+# twall
 debug
 target
 
@@ -38,3 +38,5 @@ target
 **/mutants.out*/
 
 rustc-ice-*.txt
+
+proxy.log
