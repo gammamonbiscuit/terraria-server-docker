@@ -117,7 +117,27 @@ const MSG_CONNECT_REQUEST: u8 = 0x01;
 const MIN_CONNECT_PKT: usize = 12;
 const MAX_CONNECT_PKT: usize = 128;
 
-const VERSION_TAG: &[u8] = b"Terraria";
+/// Version-string tags used to identify the client. Vanilla sends
+/// "Terraria279"; tModLoader sends e.g. "tModLoader v2025.1".
+/// The two tags never appear in each other's strings, so checking
+/// them in order is unambiguous.
+const TERRARIA_TAG: &[u8] = b"Terraria";
+const TMODLOADER_TAG: &[u8] = b"tModLoader";
+
+#[derive(Clone, Copy)]
+enum ClientKind {
+    Terraria,
+    TmodLoader,
+}
+
+impl ClientKind {
+    fn label(self) -> &'static str {
+        match self {
+            ClientKind::Terraria => "Terraria",
+            ClientKind::TmodLoader => "tModLoader",
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -137,10 +157,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn handle_client(mut client: TcpStream, addr: SocketAddr) {
     let _ = client.set_nodelay(true);
 
-    // --- Middleman: only Terraria's opening handshake gets through ---
-    match timeout(HANDSHAKE_TIMEOUT, is_terraria_handshake(&client)).await {
-        Ok(Ok(true)) => info(format!("[{addr}] Terraria handshake OK, forwarding")),
-        Ok(Ok(false)) => {
+    // --- Middleman: only Terraria / tModLoader handshakes get through ---
+    match timeout(HANDSHAKE_TIMEOUT, identify_client(&client)).await {
+        Ok(Ok(Some(kind))) => {
+            info(format!("[{addr}] {} handshake OK, forwarding", kind.label()))
+        }
+        Ok(Ok(None)) => {
             error(format!("[{addr}] Rejected: not Terraria traffic"));
             return;
         }
@@ -176,8 +198,9 @@ async fn handle_client(mut client: TcpStream, addr: SocketAddr) {
 }
 
 /// Reads (via peek, so nothing is consumed) the client's first Terraria
-/// packet and checks that it is a valid Connect Request.
-async fn is_terraria_handshake(client: &TcpStream) -> io::Result<bool> {
+/// packet and identifies the client from its version string.
+/// Returns None if the traffic is not Terraria/tModLoader.
+async fn identify_client(client: &TcpStream) -> io::Result<Option<ClientKind>> {
     // Peek the 3-byte header.
     let mut header = [0u8; HEADER_LEN];
     peek_exact(client, &mut header).await?;
@@ -188,19 +211,24 @@ async fn is_terraria_handshake(client: &TcpStream) -> io::Result<bool> {
     if msg_id != MSG_CONNECT_REQUEST
         || !(MIN_CONNECT_PKT..=MAX_CONNECT_PKT).contains(&pkt_len)
     {
-        return Ok(false);
+        return Ok(None);
     }
 
-    // Peek the entire first packet and look for the version string.
+    // Peek the entire first packet and check the version string.
     let mut pkt = vec![0u8; pkt_len];
     peek_exact(client, &mut pkt).await?;
 
-    // The payload is a length-prefixed version string like "Terraria279".
-    // Instead of parsing the exact string encoding, just search for the
-    // ASCII bytes — robust and sufficient for identification.
-    Ok(pkt[HEADER_LEN..]
-        .windows(VERSION_TAG.len())
-        .any(|w| w == VERSION_TAG))
+    // The payload is a length-prefixed version string like "Terraria279"
+    // or "tModLoader v2025.1". Instead of parsing the exact string
+    // encoding, just search for the ASCII tag — robust across versions.
+    let payload = &pkt[HEADER_LEN..];
+    if payload.windows(TERRARIA_TAG.len()).any(|w| w == TERRARIA_TAG) {
+        Ok(Some(ClientKind::Terraria))
+    } else if payload.windows(TMODLOADER_TAG.len()).any(|w| w == TMODLOADER_TAG) {
+        Ok(Some(ClientKind::TmodLoader))
+    } else {
+        Ok(None)
+    }
 }
 
 /// Like `read_exact`, but via `peek` — the bytes stay in the socket
