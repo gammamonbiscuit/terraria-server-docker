@@ -62,7 +62,23 @@ RUN chmod +x TerrariaServer.bin.x86_64
 
 ### arm-64 ###
 
-FROM mono:latest AS build-arm64
+FROM debian:forky-slim AS build-arm64
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+ENV MONO_VERSION=6.12.0.200
+
+RUN echo "Acquire::http::Proxy \"http://host.docker.internal:3142\";" >> /etc/apt/apt.conf.d/01proxy && \
+    echo "Acquire::https::Proxy \"DIRECT\";" >> /etc/apt/apt.conf.d/01proxy && \
+    sed -i 's/sha1.second_preimage_resistance.*/sha1.second_preimage_resistance = 2099-12-31/' /usr/share/apt/default-sequoia.config && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends dirmngr ca-certificates gnupg && \
+    gpg --homedir /tmp --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/mono-official-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF && \
+    chmod +r /usr/share/keyrings/mono-official-archive-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/mono-official-archive-keyring.gpg] https://download.mono-project.com/repo/debian stable-buster/snapshots/${MONO_VERSION} main" | tee /etc/apt/sources.list.d/mono-official-stable.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends mono-runtime binutils curl mono-devel ca-certificates-mono fsharp mono-vbnc nuget referenceassemblies-pcl && \
+    rm -rf /var/cache/apt /var/lib/apt /var/cache/debconf /etc/apt/apt.conf.d
 
 ENV TERRARIA_DIR=/root/.local/share/Terraria
 
