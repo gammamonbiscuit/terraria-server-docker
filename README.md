@@ -1,3 +1,32 @@
+# Terraria Server Docker
+This is a detached fork of [hexlo/terraria-server-docker](https://github.com/hexlo/terraria-server-docker), with edits that suit my needs. Same as my other docker projects, there will be no build or image for you to download, and of course no support.
+
+I usually license my projects with CC-0, but since this is a fork and there isn't one in the original repo, I'll keep it that way.
+
+## Differences
+1. Updated `mono` to "latest" version `6.12.0.200`
+1. Added log to file by launching the server with `-logfile [directory]`, this repo replaces [gammamonbiscuit/terraria-server-docker-with-logs](https://github.com/gammamonbiscuit/terraria-server-docker-with-logs)
+1. Changed the way the Dockerfile handling multiarch because I prefer building both at once using buildx
+1. Added a small handshake checker tool `twall`, because the server isn't really good at handling those random traffic from port scanners, and crashes every week or so
+
+## More About `twall`
+It checks if the incoming connection has the correct Terraria handshake, if yes then it is allowed to connect, if no then the connection will be closed. You can use environment variable `proxy_log_file` to specify its log file location.
+
+It is hard coded to listen at port `7778` and expects the server to use port `7777`, change those in the code before build if you want to have a different setup.
+
+>[!WARNING]
+>THIS IS ONLY TO REDUCE THE EFFECT CAUSED BY PORT SCANNER WHEN THE SERVER IS PUBLIC FACING, IT IS NOT A PERFECT SECURITY MEASURE AND YOU SHOULD NOT TREAT IT AS ONE
+
+## AI Usage Disclosure
+1. `twall`'s rust code is **ENTIRELY** written by **GLM-5.3**, I don't know anything about rust.
+1. All other parts involves no LLM at all.
+
+
+## Original README
+Here's the original readme if you want to know how to use this or hexlo's image.
+<details>
+<summary>Click to expand</summary>
+
 ```
  __  __     ______     __  __     __         ______    
 /\ \_\ \   /\  ___\   /\_\_\_\   /\ \       /\  __ \   
@@ -228,3 +257,5 @@ The command ban <player> will ban the indicated player from the server. A banned
 ```
 *Note: no forward-slash `/` is needed before the command, as some command interfaces require.*
 *Note: Detach from the container by pressing ctrl+p + ctrl+q*
+
+</details>
