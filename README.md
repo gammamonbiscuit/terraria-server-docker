@@ -15,10 +15,10 @@ It checks if the incoming connection has the correct Terraria handshake, if yes 
 It is hard coded to listen at port `7778` and expects the server to use port `7777`, change those in the code before build if you want to have a different setup.
 
 >[!WARNING]
->THIS IS ONLY TO REDUCE THE EFFECT CAUSED BY PORT SCANNER WHEN THE SERVER IS PUBLIC FACING, IT IS NOT A PERFECT SECURITY MEASURE AND YOU SHOULD NOT TREAT IT AS ONE
+>**THIS IS ONLY TO REDUCE THE EFFECT CAUSED BY PORT SCANNER WHEN THE SERVER IS PUBLIC FACING, IT IS NOT A PERFECT SECURITY MEASURE AND YOU SHOULD NOT TREAT IT AS ONE**
 
 ## AI Usage Disclosure
-1. `twall`'s rust code is **ENTIRELY** written by **GLM-5.3**, I don't know anything about rust.
+1. `twall` is **ENTIRELY** written by **GLM-5.3**, I don't know anything about rust.
 1. All other parts involves no LLM at all.
 
 
